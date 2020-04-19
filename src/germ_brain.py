@@ -10,13 +10,21 @@ class GermBrain:
         """Class constructor.
 
         Params:
-         - parent_code (ordered dict): Object representing the parent's code to be inherited
+         - parent_code (list of lists): Object representing the parent's code to be inherited
          - mutations (int): Apply this many mutations to the parent_code
         """
 
-        self.code = mutate(parent_code, mutations)
+        self.code = parent_code.copy()
+        for i in range(mutations):
+            self.mutate()
         self.memory = [0] * MEMORY_SIZE
         self.state = None
+
+    def mutate(self):
+        """Randomly change code in a single way"""
+
+        # TODO: implement
+        pass
 
     def resolve_value(self, expression):
         """Determines the numerical value of expr.
@@ -66,11 +74,19 @@ class GermBrain:
             elif expr[0] == 'ix':
                 # i(x|y) gives the (x|y) direction of a nearby germ identified by index
                 # Result is -1 or 1
-                index = resolve_value(expr[1]) % len(self.state.view)
-                return self.state.view(index)['dx']
+                try:
+                    index = resolve_value(expr[1]) % len(self.state.view)
+                    return self.state.view(index)['dx']
+                except ZeroDivisionError:
+                    # view is empty
+                    return 0
             elif expr[0] == 'iy':
-                index = resolve_value(expr[1]) % len(self.state.view)
-                return self.state.view(index)['dy']
+                try:
+                    index = resolve_value(expr[1]) % len(self.state.view)
+                    return self.state.view(index)['dy']
+                except ZeroDivisionError:
+                    # view is empty
+                    return 0
             elif expr[0] == 'vx':
                 # u(x|y) gives the (x|y) direction of a nearby germ identified by view id
                 # Result is -1 or 1. 0 is given if the identified germ doesn't exist in view
@@ -143,41 +159,40 @@ class GermBrain:
                         head = max(head, 0)
                         head = min(head, len(self.code) - 1)
      
-                 elif cmd == 'ax':
-                     # set the x-direction of the action to be taken
-                     new_x = self.resolve_value(self.code[head][1])
-                     if new_x < 0:
-                         ax = -1
-                     elif new_x > 0:
-                         ax = 1
-                     else: ax = 0
-                 elif cmd == 'ay':
-                     # set the y-direction of the action to be taken
-                     new_y = self.resolve_value(self.code[head][1])
-                     if new_y < 0:
-                         ay = -1
-                     elif new_y > 0:
-                         ay = 1
-                     else: ay = 0
-                 elif cmd == 'bst':
-                     # set burst value for action request
-                     burst = self.resolve_value(self.code[head][1]) == True
-                 elif cmd == 'pwr':
-                     # set power value for action request
-                     power = self.resolve_value(self.code[head][1]) % 6
-
-                 elif cmd == 'mv':
-                     # return and take the move action
-                     return {'x':ax, 'y':ay, 'action':'move', 'burst':burst}
-                 elif cmd == 'bir':
-                     # return and take the birth action
-                     return {'x':ax, 'y':ay, 'action':'birth', 'burst':burst}
-                 elif cmd == 'att':
-                     # return and take the attack action
-                     return {'x':ax, 'y':ay, 'action':'attack', 'burst':burst, 'power':power}
-                 elif cmd == 'ret':
-                     # return and take no action (always successful)
-                     return dict()
+                elif cmd == 'ax':
+                    # set the x-direction of the action to be taken
+                    new_x = self.resolve_value(self.code[head][1])
+                    if new_x < 0:
+                        ax = -1
+                    elif new_x > 0:
+                        ax = 1
+                    else: ax = 0
+                elif cmd == 'ay':
+                    # set the y-direction of the action to be taken
+                    new_y = self.resolve_value(self.code[head][1])
+                    if new_y < 0:
+                        ay = -1
+                    elif new_y > 0:
+                        ay = 1
+                    else: ay = 0
+                elif cmd == 'bst':
+                    # set burst value for action request
+                    burst = self.resolve_value(self.code[head][1]) == True
+                elif cmd == 'pwr':
+                    # set power value for action request
+                    power = self.resolve_value(self.code[head][1]) % 6
+                elif cmd == 'mv':
+                    # return and take the move action
+                    return {'x':ax, 'y':ay, 'action':'move', 'burst':burst}
+                elif cmd == 'bir':
+                    # return and take the birth action
+                    return {'x':ax, 'y':ay, 'action':'birth', 'burst':burst}
+                elif cmd == 'att':
+                    # return and take the attack action
+                    return {'x':ax, 'y':ay, 'action':'attack', 'burst':burst, 'power':power}
+                elif cmd == 'ret':
+                    # return and take no action (always successful)
+                    return dict()
 
         except Exception as err:
             raise RuntimeError(f'Exception raised from germ code (line {head})') from err

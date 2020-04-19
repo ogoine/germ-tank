@@ -1,6 +1,10 @@
-"""Main module that contains the GermTank class"""
+"""Classes and functions built around the tank simulation itself"""
 
 from math import sqrt
+from random import random, randrange
+from operator import itemgetter
+
+from germ_brain import GermBrain
 
 TANK_WIDTH = 1000
 TANK_HEIGHT = 500
@@ -14,6 +18,8 @@ GERM_BASE_ABSORB = 5.0     # Base amount of energy gained by a predator
 GERM_STAMINA = 15.0        # max stamina each germ can have
 GERM_STAMINA_REGEN = 1.0   # amount of stamina germ regenerates each standard turn
 CANCER_RATE = 0.00001      # chance a germ has of self-mutating each standard turn
+MUTATION_RATE = 0.15       # chance that offspring has of developing mutations
+MULTI_MUT_RATE = 0.5       # chance of developing each additional mutation beyon the first
 
 # energy costs
 # moving one square always costs 1 energy, as a baseline
@@ -28,6 +34,15 @@ STARTING_CODE = [['if', ['>', 'energy', 70], 2],
                  ['ax', 1],
                  ['bir']]
 
+def random_mutations():
+    if random() < MUTATION_RATE:
+        count = 1
+        while random() < MULTI_MUT_RATE:
+            count += 1
+        return count
+    else:
+        return 0
+
 class GermTank:
     """Handles the data and execution of the germs in the tank"""
 
@@ -36,7 +51,11 @@ class GermTank:
 
         self.tank = [[None] * TANK_HEIGHT] * TANK_WIDTH
         self.id_registry = set()
-        # TODO: add germs
+        # add a starting number of germs equal to TANK_WIDTH
+        # set comprehension ensure rare duplicates are removed
+        locs = {(randrange(TANK_WIDTH), randrange(TANK_HEIGHT)) for i in range(TANK_WIDTH)}
+        for x, y in locs:
+            self.add_germ(x, y, GermBrain(STARTING_CODE, 0))
 
     def new_id(self):
         """Creates and returns a new uid"""
@@ -81,8 +100,18 @@ class GermTank:
     def get_birth_loc(x, y, dx, dy):
         """Gets a suitable birth location relative to (x, y) as close as possible to request"""
 
-        # TODO: implement
-        pass
+        # each loc is a 3-tuple of x, y, and d, the distance from original request
+        locs = []
+        for i in [-1, 0, 1]:
+            for j in [-1, 0, 1]:
+                if not (i == 0 and j == 0):
+                    locs.append((i, j, abs(dx - i) + abs(dy - j)))
+        locs = sorted(locs, key=itemgetter(3))
+        for ndx, ndy, d in locs:
+            new_x, new_y = self.get_relative_loc(x, y, ndx, ndy)
+            if new_x != -1 and not self.tank[new_x][new_y]:
+                return x, y
+        return -1, -1
 
     def get_relative_loc(x, y, dx, dy):
         """Gets a new location relative to (x, y) accounting for tank dimensions"""
@@ -93,12 +122,11 @@ class GermTank:
                 new_x = 0
             elif new_x < 0:
                 new_x = TANK_WIDTH - 1
-        else:
-            new_x = min(new_x, TANK_WIDTH - 1)
-            new_x = max(new_x, 0)
+        elif new_x >= TANK_WIDTH or new_x < 0:
+            return -1, -1
         new_y = y + dy
-        new_y = min(new_y, TANK_HEIGHT - 1)
-        new_y = max(new_y, 0)
+        if new_y >= TANK_HEIGHT or new_y < 0:
+            return -1, -1
         return new_x, new_y
 
     def get_sunlight(self, x, y):
@@ -127,15 +155,17 @@ class GermTank:
         elif request['action'] == 'halt':
             germ['success'] = False
             germ['energy'] -= 1
+
         elif request['action'] == 'move':
             new_x, new_y = self.get_relative_loc(x, y, request['x'], request['y'])
-            if self.tank[new_x][new_y]:
+            if new_x == -1 or self.tank[new_x][new_y]:
                 germ['success'] = False
             else:
                 germ['success'] = True
                 germ['energy'] -= sqrt(request['x'] ** 2 + request['y'] ** 2)
                 self.tank[new_x][new_y] = germ
                 self.tank[x][y] = None
+
         elif request['action'] == 'birth':
             new_x, new_y = self.get_birth_loc(x, y, request['x'], request['y'])
             if new_x == -1 or germ['energy'] < INIT_GERM_ENERGY + BIRTH_COST + 1:
@@ -144,6 +174,7 @@ class GermTank:
                 germ['success'] = True
                 germ['energy'] -= INIT_GERM_ENERGY + BIRTH_COST
                 self.add_germ(new_x, new_y, GermBrain(germ['brain'].code, random_mutations()))
+
         elif request['action'] == 'attack':
             tgt_x, tgt_y = self.get_relative_loc(x, y, request['x'], request['y'])
             cost = ATTACK_BASE_COST + ATTACK_POWER_COST * float(request['power'])
@@ -172,8 +203,10 @@ class GermTank:
                 germ = self.tank[x][y]
                 if germ:
                     # on standard turns, do upkeep tasks
-                    # TODO: implement cancer
                     if not burst_turn:
+                        if random() < CANCER_RATE:
+                            while random() < MULTI_MUT_RATE:
+                                germ.mutate()
                         germ['energy'] += self.get_sunlight(x, y) - UPKEEP_COST
                         germ['stamina'] += GERM_STAMINA_REGEN
                         germ['stamina'] = min(germ['stamina'], GERM_STAMINA)
