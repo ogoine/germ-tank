@@ -26,7 +26,7 @@ class GermBrain:
         # TODO: implement
         pass
 
-    def resolve_value(self, expression):
+    def resolve_value(self, expr):
         """Determines the numerical value of expr.
 
          - If expr is a list, then it's an operation to further resolve.
@@ -34,55 +34,55 @@ class GermBrain:
          - If expr is a str, then it's a special value relating to the germ state.
         """
 
-        if typeof(expr) == int:
+        if type(expr) == int:
             return expr
-        elif typeof(expr) == str:
+        elif type(expr) == str:
             if expr in self.state.keys() and expr != 'view':
                 return self.state[expr]
             else:
                 raise KeyError(f'"{expr}" is not a valid special value"')
-        elif typeof(expr) == list:
+        elif type(expr) == list:
             if expr[0] == '+':
-                return resolve_value(expr[1]) + resolve_value(expr[2])
+                return self.resolve_value(expr[1]) + self.resolve_value(expr[2])
             elif expr[0] == '-':
-                return resolve_value(expr[1]) - resolve_value(expr[2])
+                return self.resolve_value(expr[1]) - self.resolve_value(expr[2])
             elif expr[0] == '*':
-                return resolve_value(expr[1]) * resolve_value(expr[2])
+                return self.resolve_value(expr[1]) * self.resolve_value(expr[2])
             elif expr[0] == '/':
-                return resolve_value(expr[1]) / resolve_value(expr[2])
+                return self.resolve_value(expr[1]) / self.resolve_value(expr[2])
 
             elif expr[0] == '&':
-                return resolve_value(expr[1]) and resolve_value(expr[2])
+                return self.resolve_value(expr[1]) and self.resolve_value(expr[2])
             elif expr[0] == '|':
-                return resolve_value(expr[1]) or resolve_value(expr[2])
+                return self.resolve_value(expr[1]) or self.resolve_value(expr[2])
             elif expr[0] == '!':
-                return not resolve_value(expr[1])
+                return not self.resolve_value(expr[1])
 
             elif expr[0] == '<':
-                return resolve_value(expr[1]) < resolve_value(expr[2])
+                return self.resolve_value(expr[1]) < self.resolve_value(expr[2])
             elif expr[0] == '>':
-                return resolve_value(expr[1]) > resolve_value(expr[2])
+                return self.resolve_value(expr[1]) > self.resolve_value(expr[2])
             elif expr[0] == '==':
-                return resolve_value(expr[1]) == resolve_value(expr[2])
+                return self.resolve_value(expr[1]) == self.resolve_value(expr[2])
             elif expr[0] == '!=':
-                return resolve_value(expr[1]) != resolve_value(expr[2])
+                return self.resolve_value(expr[1]) != self.resolve_value(expr[2])
 
             elif expr[0] == 'm':
-                register = resolve_value(expr[1]) % len(self.memory)
+                register = self.resolve_value(expr[1]) % len(self.memory)
                 return self.memory[register]
 
             elif expr[0] == 'ix':
                 # i(x|y) gives the (x|y) direction of a nearby germ identified by index
                 # Result is -1 or 1
                 try:
-                    index = resolve_value(expr[1]) % len(self.state.view)
+                    index = self.resolve_value(expr[1]) % len(self.state.view)
                     return self.state.view(index)['dx']
                 except ZeroDivisionError:
                     # view is empty
                     return 0
             elif expr[0] == 'iy':
                 try:
-                    index = resolve_value(expr[1]) % len(self.state.view)
+                    index = self.resolve_value(expr[1]) % len(self.state.view)
                     return self.state.view(index)['dy']
                 except ZeroDivisionError:
                     # view is empty
@@ -90,13 +90,13 @@ class GermBrain:
             elif expr[0] == 'vx':
                 # u(x|y) gives the (x|y) direction of a nearby germ identified by view id
                 # Result is -1 or 1. 0 is given if the identified germ doesn't exist in view
-                uid = resolve_value(expr[1])
+                uid = self.resolve_value(expr[1])
                 try:
                     return next(i['dx'] for i in self.state.view if i['id'] == uid)
                 except StopIteration:
                     return 0
             elif expr[0] == 'vy':
-                uid = resolve_value(expr[1])
+                uid = self.resolve_value(expr[1])
                 try:
                     return next(i['dy'] for i in self.state.view if i['id'] == uid)
                 except StopIteration:
@@ -106,7 +106,7 @@ class GermBrain:
                 raise KeyError(f'"{expr}" is not a valid operator')
         else:
             raise TypeError(f'"{repr(expr)}" is not a valid expr type '
-                            f'({typeof(expr)})')
+                            f'({type(expr)})')
 
     def run(self, state):
         """Execute code and decide what to do next.
@@ -139,10 +139,11 @@ class GermBrain:
         executed = 0
         self.state = state
         try:
-            while head < len(self.code):
+            while executed < MAX_EXECUTIONS:
                 executed += 1
-                if executed > MAX_EXECUTIONS:
-                    return {'action':'halt'}
+                if not self.code[head]:
+                    # code end: return and take no action (always successful)
+                    return dict()
                 cmd = self.code[head][0]
 
                 if cmd == 'set':
@@ -193,6 +194,11 @@ class GermBrain:
                 elif cmd == 'ret':
                     # return and take no action (always successful)
                     return dict()
+                else:
+                    raise KeyError(f'"{cmd}" is not a valid command')
+                head += 1
+            # execution limit exceeded
+            return {'action':'halt'}
 
         except Exception as err:
             raise RuntimeError(f'Exception raised from germ code (line {head})') from err

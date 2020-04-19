@@ -6,8 +6,8 @@ from operator import itemgetter
 
 from germ_brain import GermBrain
 
-TANK_WIDTH = 1000
-TANK_HEIGHT = 500
+TANK_WIDTH = 800
+TANK_HEIGHT = 400
 TANK_WRAP = True           # whether the sides of the tank wrap
 SOLAR_POWER = 5.0          # energy imparted by sunlight per turn per column of cells
 GERM_OPACITY = 0.5         # max energy each germ can absorb and block
@@ -49,44 +49,55 @@ class GermTank:
     def __init__(self):
         """Class constructor"""
 
-        self.tank = [[None] * TANK_HEIGHT] * TANK_WIDTH
-        self.id_registry = set()
+        self.tank = [[None] * TANK_HEIGHT for i in range(TANK_WIDTH)]
+        self.id_registry = dict()
+        self.new_germs = []
         # add a starting number of germs equal to TANK_WIDTH
         # set comprehension ensure rare duplicates are removed
         locs = {(randrange(TANK_WIDTH), randrange(TANK_HEIGHT)) for i in range(TANK_WIDTH)}
         for x, y in locs:
-            self.add_germ(x, y, GermBrain(STARTING_CODE, 0))
+            self.new_id(self.add_germ(x, y, GermBrain(STARTING_CODE, 0)))
 
-    def new_id(self):
-        """Creates and returns a new uid"""
+    def get_pixels(self):
+        """Returns a list of pixels representing germs in the form (x, y, r, g, b)"""
 
-        all_ids = set(range(max(self.id_registry)))
-        new_id = min(all_ids - self.id_registry)
-        self.id_registry.add(new_id)
-        return new_id
+        return [(i['x'], i['y'], 255, 255, 255) for i in self.id_registry.values()]
 
-    def kill_germ(self, x, y):
-        """Destroys a germ at the given location"""
+    def new_id(self, germ):
+        """Registers a new germ and gives it a uid"""
 
-        if not self.tank[x][y]:
-            raise RuntimeError(f'Location ({x}, {y}) is empty')
-        self.id_registry.remove(self.tank[x][y]['uid'])
-        self.tank[x][y] = None
+        if self.id_registry:
+            all_ids = set(range(max(self.id_registry.keys()) + 2))
+            new_id = min(all_ids - self.id_registry.keys())
+        else:
+            new_id = 0
+        germ['uid'] = new_id
+        self.id_registry[new_id] = germ
+
+    def kill_germ(self, germ):
+        """Destroys the given germ"""
+
+        del self.id_registry[germ['uid']]
+        self.tank[germ['x']][germ['y']] = None
 
     def add_germ(self, x, y, germ_brain):
         """Creates a new germ at the given location"""
 
         if self.tank[x][y]:
             raise RuntimeError(f'Location ({x}, {y}) already occupied')
-        self.tank[x][y] = {
+        germ = {
             'brain':germ_brain,
+            'alive':True,
+            'x':x,
+            'y':y,
             'energy':INIT_GERM_ENERGY,
             'stamina':GERM_STAMINA,
             'success':True,
             'burst':False,
             'pain':0,
-            'uid':self.new_id(),
             'view_ids':dict()}
+        self.tank[x][y] = germ
+        return germ
 
     def get_view(self, x, y):
         """Returns a view object for a germ at the given location.
@@ -97,7 +108,7 @@ class GermTank:
         # TODO: implement
         return []
 
-    def get_birth_loc(x, y, dx, dy):
+    def get_birth_loc(self, x, y, dx, dy):
         """Gets a suitable birth location relative to (x, y) as close as possible to request"""
 
         # each loc is a 3-tuple of x, y, and d, the distance from original request
@@ -106,13 +117,14 @@ class GermTank:
             for j in [-1, 0, 1]:
                 if not (i == 0 and j == 0):
                     locs.append((i, j, abs(dx - i) + abs(dy - j)))
-        locs = sorted(locs, key=itemgetter(3))
+        locs = sorted(locs, key=itemgetter(2))
         for ndx, ndy, d in locs:
             new_x, new_y = self.get_relative_loc(x, y, ndx, ndy)
             if new_x != -1 and not self.tank[new_x][new_y]:
-                return x, y
+                return new_x, new_y
         return -1, -1
 
+    @staticmethod
     def get_relative_loc(x, y, dx, dy):
         """Gets a new location relative to (x, y) accounting for tank dimensions"""
 
@@ -144,6 +156,7 @@ class GermTank:
     def process_request(self, request, germ, x, y):
         """Process a request returned by a germ"""
 
+        # TODO: Don't spend burst if next turn is a standard
         if 'burst' in request and request['burst']:
             germ['energy'] -= BURST_COST
             germ['burst'] = True
@@ -163,6 +176,8 @@ class GermTank:
             else:
                 germ['success'] = True
                 germ['energy'] -= sqrt(request['x'] ** 2 + request['y'] ** 2)
+                germ['x'] = new_x
+                germ['y'] = new_y
                 self.tank[new_x][new_y] = germ
                 self.tank[x][y] = None
 
@@ -173,7 +188,7 @@ class GermTank:
             else:
                 germ['success'] = True
                 germ['energy'] -= INIT_GERM_ENERGY + BIRTH_COST
-                self.add_germ(new_x, new_y, GermBrain(germ['brain'].code, random_mutations()))
+                self.new_germs.append(self.add_germ(new_x, new_y, GermBrain(germ['brain'].code, random_mutations())))
 
         elif request['action'] == 'attack':
             tgt_x, tgt_y = self.get_relative_loc(x, y, request['x'], request['y'])
@@ -189,7 +204,7 @@ class GermTank:
                 if target['stamina'] <= 0:
                     germ['energy'] += ((target['energy'] - GERM_BASE_ABSORB)
                         * GERM_ABSORB_RATE + GERM_BASE_ABSORB)
-                    self.kill_germ(tgt_x, tgt_y)
+                    target['alive'] = False
 
     def update(self, burst_turn):
         """Gives all germs a turn.
@@ -198,38 +213,41 @@ class GermTank:
          - burst_turn (boolean): True if this is a burst turn; otherwise, a standard turn.
         """
 
-        for x in range(TANK_WIDTH):
-            for y in range(TANK_HEIGHT):
-                germ = self.tank[x][y]
-                if germ:
-                    # on standard turns, do upkeep tasks
-                    if not burst_turn:
-                        if random() < CANCER_RATE:
-                            while random() < MULTI_MUT_RATE:
-                                germ.mutate()
-                        germ['energy'] += self.get_sunlight(x, y) - UPKEEP_COST
-                        germ['stamina'] += GERM_STAMINA_REGEN
-                        germ['stamina'] = min(germ['stamina'], GERM_STAMINA)
-                        if germ['energy'] <= 0:
-                            self.kill_germ(x, y)
-                            continue
-                        germ['energy'] = min(germ['energy'], MAX_GERM_ENERGY)
+        for germ in self.id_registry.values():
+            # on standard turns, do upkeep tasks
+            if not burst_turn:
+                if random() < CANCER_RATE:
+                    while random() < MULTI_MUT_RATE:
+                        germ['brain'].mutate()
+                germ['energy'] += self.get_sunlight(germ['x'], germ['y']) - UPKEEP_COST
+                germ['stamina'] += GERM_STAMINA_REGEN
+                germ['stamina'] = min(germ['stamina'], GERM_STAMINA)
+                if germ['energy'] <= 0:
+                    germ['alive'] = False
+                    continue
+                germ['energy'] = min(germ['energy'], MAX_GERM_ENERGY)
 
-                    # if this is a standard turn or the germ paid for a burst, take action
-                    if not burst_turn or germ['burst']:
-                        brightness = int(100 * self.get_sunlight(x, y) / GERM_OPACITY)
-                        request = germ['brain'].run(
-                            {'energy':germ['energy'],
-                             'brightness':brightness,
-                             'stamina':germ['stamina'],
-                             'pain':germ['pain'],
-                             'view':self.get_view(x, y),
-                             'success':germ['success']})
-                        self.process_request(request, germ, x, y)
+            # if this is a standard turn or the germ paid for a burst, take action
+            if not burst_turn or germ['burst']:
+                brightness = int(100 * self.get_sunlight(germ['x'], germ['y']) / GERM_OPACITY)
+                request = germ['brain'].run(
+                    {'energy':germ['energy'],
+                     'brightness':brightness,
+                     'stamina':germ['stamina'],
+                     'pain':germ['pain'],
+                     'view':self.get_view(germ['x'], germ['y']),
+                     'success':germ['success']})
+                self.process_request(request, germ, germ['x'], germ['y'])
 
-                        # pain only tracks since last turn; also recheck energy bounds
-                        germ['pain'] = 0
-                        if germ['energy'] <= 0:
-                            self.kill_germ(x, y)
-                            continue
-                        germ['energy'] = min(germ['energy'], MAX_GERM_ENERGY)
+                # pain only tracks since last turn; also recheck energy bounds
+                germ['pain'] = 0
+                if germ['energy'] <= 0:
+                    germ['alive'] = False
+                germ['energy'] = min(germ['energy'], MAX_GERM_ENERGY)
+        to_kill = [i for i in self.id_registry.values() if not i['alive']]
+        for i in to_kill:
+            self.kill_germ(i)
+        for i in self.new_germs:
+            self.new_id(i)
+        self.new_germs = []
+
