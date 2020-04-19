@@ -22,11 +22,11 @@ class GermBrain:
         """Determines the numerical value of expr.
 
          - If expr is a list, then it's an operation to further resolve.
-         - If expr is a float, then it's a literal.
+         - If expr is an int, then it's a literal.
          - If expr is a str, then it's a special value relating to the germ state.
         """
 
-        if typeof(expr) == float:
+        if typeof(expr) == int:
             return expr
         elif typeof(expr) == str:
             if expr in self.state.keys() and expr != 'view':
@@ -60,27 +60,27 @@ class GermBrain:
                 return resolve_value(expr[1]) != resolve_value(expr[2])
 
             elif expr[0] == 'm':
-                register = int(resolve_value(expr[1])) % len(self.memory)
+                register = resolve_value(expr[1]) % len(self.memory)
                 return self.memory[register]
 
             elif expr[0] == 'ix':
                 # i(x|y) gives the (x|y) direction of a nearby germ identified by index
                 # Result is -1 or 1
-                index = int(resolve_value(expr[1])) % len(self.state.view)
+                index = resolve_value(expr[1]) % len(self.state.view)
                 return self.state.view(index)['dx']
             elif expr[0] == 'iy':
-                index = int(resolve_value(expr[1])) % len(self.state.view)
+                index = resolve_value(expr[1]) % len(self.state.view)
                 return self.state.view(index)['dy']
-            elif expr[0] == 'ux':
-                # u(x|y) gives the (x|y) direction of a nearby germ identified by uid
+            elif expr[0] == 'vx':
+                # u(x|y) gives the (x|y) direction of a nearby germ identified by view id
                 # Result is -1 or 1. 0 is given if the identified germ doesn't exist in view
-                uid = int(resolve_value(expr[1]))
+                uid = resolve_value(expr[1])
                 try:
                     return next(i['dx'] for i in self.state.view if i['id'] == uid)
                 except StopIteration:
                     return 0
-            elif expr[0] == 'uy':
-                uid = int(resolve_value(expr[1]))
+            elif expr[0] == 'vy':
+                uid = resolve_value(expr[1])
                 try:
                     return next(i['dy'] for i in self.state.view if i['id'] == uid)
                 except StopIteration:
@@ -97,10 +97,11 @@ class GermBrain:
 
         Params:
          - state (dict): The current state of the germ. Keys are:
-             - energy (float): Amount of energy remaining
-             - brightness (float): Amount of "sunlight" energy gained per standard frame
-             - stamina (float): Amount of stamina remaining
-             - pain (float): Amount of damage taken since last turn
+             - energy (int): Amount of energy remaining
+             - brightness (int): Amount of sunlight available
+                Scale of 0 to 100 indicating percent of GERM_OPACITY
+             - stamina (int): Amount of stamina remaining
+             - pain (int): Amount of damage taken since last turn
              - view (list of dict): Data about other germs in the vicinity
              - success (boolean): False if an action was taken last turn resulting
                 in no change of state; otherwise True.
@@ -130,13 +131,13 @@ class GermBrain:
 
                 if cmd == 'set':
                     # set the value of a variable
-                    register = int(self.resolve_value(self.code[head][1])) % len(self.memory)
-                    value = int(self.resolve_value(self.code[head][2]))
+                    register = self.resolve_value(self.code[head][1]) % len(self.memory)
+                    value = self.resolve_value(self.code[head][2])
                     self.memory[register] = value
                 elif cmd == 'if':
                     # if expr is true, jump head to a new spot
-                    expr = self.resolve_value(self.code[head][1]))
-                    dest = int(self.resolve_value(self.code[head][2]))
+                    expr = self.resolve_value(self.code[head][1])
+                    dest = self.resolve_value(self.code[head][2])
                     if dest != 0 and expr:
                         head += dest
                         head = max(head, 0)
@@ -163,7 +164,7 @@ class GermBrain:
                      burst = self.resolve_value(self.code[head][1]) == True
                  elif cmd == 'pwr':
                      # set power value for action request
-                     power = int(self.resolve_value(self.code[head][1])) % 6
+                     power = self.resolve_value(self.code[head][1]) % 6
 
                  elif cmd == 'mv':
                      # return and take the move action
