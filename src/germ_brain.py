@@ -152,13 +152,17 @@ class GermBrain:
                     value = self.resolve_value(self.code[head][2])
                     self.memory[register] = value
                 elif cmd == 'if':
-                    # if expr is true, jump head to a new spot
+                    # if expr is false, branch head to the corresponding "mark"
                     expr = self.resolve_value(self.code[head][1])
-                    dest = self.resolve_value(self.code[head][2])
-                    if dest != 0 and expr:
-                        head += dest
-                        head = max(head, 0)
-                        head = min(head, len(self.code) - 1)
+                    dest = self.code[head][2]
+                    if not expr:
+                        for i, elem in enumerate(self.code):
+                            if elem[0] == "mrk" and elem[1] == dest:
+                                head = i
+                                break
+                elif cmd == 'mrk':
+                    # destination of an if statement; does nothing by itself
+                    pass
      
                 elif cmd == 'ax':
                     # set the x-direction of the action to be taken
