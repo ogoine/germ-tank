@@ -197,6 +197,7 @@ class GermBrain:
                 register = self.resolve_value(expr[1]) % len(self.memory)
                 return self.memory[register]
 
+            # TODO: Add food detection, add new operators to mutator above
             elif expr[0] == 'ix':
                 # i(x|y) gives the (x|y) direction of a nearby germ identified by index
                 # Result is -1 or 1
@@ -214,7 +215,7 @@ class GermBrain:
                     # view is empty
                     return 0
             elif expr[0] == 'vx':
-                # u(x|y) gives the (x|y) direction of a nearby germ identified by view id
+                # v(x|y) gives the (x|y) direction of a nearby germ identified by view id
                 # Result is -1 or 1. 0 is given if the identified germ doesn't exist in view
                 uid = self.resolve_value(expr[1])
                 try:
