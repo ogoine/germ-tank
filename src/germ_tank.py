@@ -6,11 +6,11 @@ from operator import itemgetter
 
 from germ_brain import GermBrain
 
-TANK_WIDTH = 400
-TANK_HEIGHT = 200
+TANK_WIDTH = 150
+TANK_HEIGHT = 100
 TANK_WRAP = True           # whether the sides of the tank wrap
 MAX_FOOD_DENSITY = 0.02    # max amount of food per pixel spawned
-FOOD_GROWTH_RATE = 10      # max number of food spawned per frame
+FOOD_GROWTH_RATE = 0.05      # proportion of max food spawned per frame
 FOOD_ENERGY = 20.0         # amount of energy earned per food particle
 MAX_GERM_ENERGY = 100.0    # max energy each germ can store
 INIT_GERM_ENERGY = 30.0    # starting energy of germ: must commit this + BIRTH_COST to reproduce
@@ -18,32 +18,29 @@ GERM_ABSORB_RATE = 0.5     # What proportion of a prey's energy is gained by a p
 GERM_BASE_ABSORB = 5.0     # Base amount of energy gained by a predator
 GERM_STAMINA = 10.0        # max stamina each germ can have
 GERM_STAMINA_REGEN = 0.5   # amount of stamina germ regenerates each standard turn
+GERM_VIEW_DIST = 10        # view distance of germs; must be 50 or less
 DEATH_RATE = 0.0001        # chance a germ has of self-destructing each standard turn
 MUTATION_RATE = 0.15       # chance that offspring has of developing mutations
 MULTI_MUT_RATE = 0.5       # chance of developing each additional mutation beyon the first
 
 # energy costs
 # moving one square always costs 1 energy, as a baseline
-UPKEEP_COST = 0.2         # flat cost of staying alive each turn. Germs pay 10% of this at top
+UPKEEP_COST = 0.5         # flat cost of staying alive each turn. Germs pay 10% of this at top
                           # of tank and 100% at bottom, scaling linearly
 BURST_COST = 1.0          # cost of taking a burst turn
 ATTACK_BASE_COST = 1.0    # base cost of taking attack action
 ATTACK_POWER_COST = 0.5   # how much energy it costs per unit of power to attack
 BIRTH_COST = 10.0         # how much energy is lost in birthing process
 
+# start code is basically: reproduce if energy is > 70, otherwise move toward
+# the nearest food particle
 STARTING_CODE = [['if', ['>', 'energy', 70], 'm0'],
                  ['ax', 1],
                  ['bir'],
-                 ['mrk', 'm0']]
-
-def random_mutations():
-    if random() < MUTATION_RATE:
-        count = 1
-        while random() < MULTI_MUT_RATE:
-            count += 1
-        return count
-    else:
-        return 0
+                 ['mrk', 'm0'],
+                 ['ax', ['fix', 0]],
+                 ['ay', ['fiy', 0]],
+                 ['mv']]
 
 class GermTank:
     """Handles the data and execution of the germs in the tank"""
@@ -54,6 +51,7 @@ class GermTank:
         self.tank = [[None] * TANK_HEIGHT for i in range(TANK_WIDTH)]
         self.id_registry = dict()
         self.new_germs = []
+
         # add a starting number of germs and food each equal to TANK_WIDTH
         # set comprehension ensure rare duplicates are removed
         self.food_count = TANK_WIDTH
@@ -66,6 +64,19 @@ class GermTank:
                 # germs with no brain are food particles
                 self.new_id(self.add_germ(x, y, None))
             c += 1
+
+        # create view_locs, a list of visible relative coordinates based on GERM_VIEW_DIST
+        # sorted by near to far
+        # TODO: figure out how to sort by angle of unit circle?
+        view_locs_dist = []
+        for i in range(-50, 51):
+            for j in range(-50, 51):
+                if not (i == 0 and j == 0):
+                    dist = sqrt(i ** 2 + j ** 2)
+                    if dist <= GERM_VIEW_DIST:
+                        view_locs_dist.append(((i, j), dist))
+        view_locs_dist = sorted(view_locs_dist, key=itemgetter(1, 0))
+        self.view_locs = [i[0] for i in view_locs_dist]
 
     def get_pixels(self):
         """Returns a list of pixels representing germs in the form (x, y, r, g, b)"""
@@ -120,13 +131,21 @@ class GermTank:
         return germ
 
     def get_view(self, x, y):
-        """Returns a view object for a germ at the given location.
+        """Returns a view object for a germ at the given location."""
 
-        Returns (list of dict): All germs within viewing distance in order of nearness.
-        """
-
-        # TODO: implement
-        return []
+        def get_obj(dx, dy):
+            tgt_x, tgt_y = self.get_relative_loc(x, y, dx, dy)
+            if tgt_x != -1:
+                tdx = tgt_x - x
+                tdy = tgt_y - y
+                cell = self.tank[tgt_x][tgt_y]
+                if cell and cell['alive']:
+                    return {'dx':tdx, 'dy':tdy, 'is_food':cell['brain'] is None}
+            return None
+        objs = [get_obj(dx, dy) for dx, dy in self.view_locs]
+        germs = [i for i in objs if i and not i['is_food']]
+        food = [i for i in objs if i and i['is_food']]
+        return {'germs':germs, 'food':food}
 
     def get_birth_loc(self, x, y, dx, dy):
         """Gets a suitable birth location relative to (x, y) as close as possible to request"""
@@ -151,9 +170,9 @@ class GermTank:
         new_x = x + dx
         if TANK_WRAP:
             if new_x >= TANK_WIDTH:
-                new_x = 0
+                new_x -= TANK_WIDTH
             elif new_x < 0:
-                new_x = TANK_WIDTH - 1
+                new_x += TANK_WIDTH
         elif new_x >= TANK_WIDTH or new_x < 0:
             return -1, -1
         new_y = y + dy
@@ -211,7 +230,8 @@ class GermTank:
             else:
                 germ['success'] = True
                 germ['energy'] -= INIT_GERM_ENERGY + BIRTH_COST
-                self.new_germs.append(self.add_germ(new_x, new_y, GermBrain(germ['brain'].code, random_mutations())))
+                self.new_germs.append(
+                    self.add_germ(new_x, new_y, GermBrain(germ['brain'].code, random_mutations())))
 
         elif request['action'] == 'attack':
             tgt_x, tgt_y = self.get_relative_loc(x, y, request['x'], request['y'])
@@ -237,55 +257,58 @@ class GermTank:
         """
 
         for germ in self.id_registry.values():
-            # germ or food?
-            if germ['brain']:
-                # on standard turns, do upkeep tasks
-                if not burst_turn:
-                    if random() < DEATH_RATE:
-                        germ['alive'] = False
-                        continue
-                    germ['energy'] -= UPKEEP_COST * (0.1 + 0.9 * (float(germ['y']) / TANK_HEIGHT))
-                    germ['stamina'] += GERM_STAMINA_REGEN
-                    germ['stamina'] = min(germ['stamina'], GERM_STAMINA)
-                    if germ['energy'] <= 0:
-                        germ['alive'] = False
-                        continue
-                    germ['energy'] = min(germ['energy'], MAX_GERM_ENERGY)
+            if germ['alive']:
+                # germ or food?
+                if germ['brain']:
+                    # on standard turns, do upkeep tasks
+                    if not burst_turn:
+                        if random() < DEATH_RATE:
+                            germ['alive'] = False
+                            continue
+                        germ['energy'] -= UPKEEP_COST * (0.1 + 0.9 * (float(germ['y']) / TANK_HEIGHT))
+                        germ['stamina'] += GERM_STAMINA_REGEN
+                        germ['stamina'] = min(germ['stamina'], GERM_STAMINA)
+                        if germ['energy'] <= 0:
+                            germ['alive'] = False
+                            continue
+                        germ['energy'] = min(germ['energy'], MAX_GERM_ENERGY)
 
-                # if this is a standard turn or the germ paid for a burst, take action
-                if not burst_turn or germ['burst']:
-                    self.dine(germ)
-                    brightness = (1.0 -  0.9 * (float(germ['y']) / TANK_HEIGHT))
-                    request = germ['brain'].run(
-                        {'energy':germ['energy'],
-                         'brightness':brightness,
-                         'stamina':germ['stamina'],
-                         'pain':germ['pain'],
-                         'view':self.get_view(germ['x'], germ['y']),
-                         'success':germ['success']})
-                    self.process_request(request, germ, germ['x'], germ['y'])
+                    # if this is a standard turn or the germ paid for a burst, take action
+                    if not burst_turn or germ['burst']:
+                        self.dine(germ)
+                        brightness = (1.0 -  0.9 * (float(germ['y']) / TANK_HEIGHT))
+                        request = germ['brain'].run(
+                            {'energy':germ['energy'],
+                             'brightness':brightness,
+                             'stamina':germ['stamina'],
+                             'pain':germ['pain'],
+                             'view':self.get_view(germ['x'], germ['y']),
+                             'success':germ['success']})
+                        self.process_request(request, germ, germ['x'], germ['y'])
 
-                    # pain only tracks since last turn; also recheck energy bounds
-                    germ['pain'] = 0
-                    if germ['energy'] <= 0:
-                        germ['alive'] = False
-                    germ['energy'] = min(germ['energy'], MAX_GERM_ENERGY)
+                        # pain only tracks since last turn; also recheck energy bounds
+                        germ['pain'] = 0
+                        if germ['energy'] <= 0:
+                            germ['alive'] = False
+                        germ['energy'] = min(germ['energy'], MAX_GERM_ENERGY)
 
-            # food particle
-            elif not burst_turn:
-                # it moves in a random direction if possible
-                locs = []
-                for i in [-1, 0, 1]:
-                    for j in [-1, 0, 1]:
-                        if not (i == 0 and j == 0):
-                            locs.append((i, j))
-                dx, dy = choice(locs)
-                new_x, new_y = self.get_relative_loc(germ['x'], germ['y'], dx, dy)
-                if new_x != -1 and not self.tank[new_x][new_y]:
-                    germ['x'] = new_x
-                    germ['y'] = new_y
-                    self.tank[new_x][new_y] = germ
-                    self.tank[germ['x']][germ['y']] = None
+                # food particle
+                elif not burst_turn:
+                    # it moves in a random direction if possible
+                    locs = []
+                    for i in [-1, 0, 1]:
+                        for j in [-1, 0, 1]:
+                            if not (i == 0 and j == 0):
+                                locs.append((i, j))
+                    dx, dy = choice(locs)
+                    new_x, new_y = self.get_relative_loc(germ['x'], germ['y'], dx, dy)
+                    if new_x != -1 and not self.tank[new_x][new_y]:
+                        old_x = germ['x']
+                        old_y = germ['y']
+                        germ['x'] = new_x
+                        germ['y'] = new_y
+                        self.tank[new_x][new_y] = germ
+                        self.tank[old_x][old_y] = None
 
 
         # kill germs marked for death and register new ids
@@ -299,7 +322,7 @@ class GermTank:
         # regenerate food
         max_food =  TANK_WIDTH * TANK_HEIGHT * MAX_FOOD_DENSITY
         if self.food_count < max_food:
-            to_add = min(FOOD_GROWTH_RATE, max_food - self.food_count)
+            to_add = min(FOOD_GROWTH_RATE * max_food, max_food - self.food_count)
             c = 0
             # check up to 1000 random locations for openings
             for i in range(1000):
@@ -310,3 +333,12 @@ class GermTank:
                     c += 1
                     if c >= to_add:
                         break
+
+def random_mutations():
+    if random() < MUTATION_RATE:
+        count = 1
+        while random() < MULTI_MUT_RATE:
+            count += 1
+        return count
+    else:
+        return 0

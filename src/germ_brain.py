@@ -127,10 +127,10 @@ class GermBrain:
                        ['==', self.rand_value(), self.rand_value()],
                        ['!=', self.rand_value(), self.rand_value()],
                        ['m', self.rand_value()],
-                       ['ix', self.rand_value()],
-                       ['iy', self.rand_value()],
-                       ['vx', self.rand_value()],
-                       ['vy', self.rand_value()]])
+                       ['gix', self.rand_value()],
+                       ['giy', self.rand_value()],
+                       ['fix', self.rand_value()],
+                       ['fiy', self.rand_value()]])
 
     def rand_command(self):
         """Returns a list representing a random command and args"""
@@ -197,36 +197,33 @@ class GermBrain:
                 register = self.resolve_value(expr[1]) % len(self.memory)
                 return self.memory[register]
 
-            # TODO: Add food detection, add new operators to mutator above
-            elif expr[0] == 'ix':
-                # i(x|y) gives the (x|y) direction of a nearby germ identified by index
-                # Result is -1 or 1
+            elif expr[0] == 'gix':
                 try:
-                    index = self.resolve_value(expr[1]) % len(self.state['view'])
-                    return self.state['view'][index]['dx']
+                    index = self.resolve_value(expr[1]) % len(self.state['view']['germs'])
+                    return self.state['view']['germs'][index]['dx']
                 except ZeroDivisionError:
                     # view is empty
                     return 0
-            elif expr[0] == 'iy':
+            elif expr[0] == 'giy':
                 try:
-                    index = self.resolve_value(expr[1]) % len(self.state['view'])
-                    return self.state['view'][index]['dy']
+                    index = self.resolve_value(expr[1]) % len(self.state['view']['germs'])
+                    return self.state['view']['germs'][index]['dy']
                 except ZeroDivisionError:
                     # view is empty
                     return 0
-            elif expr[0] == 'vx':
-                # v(x|y) gives the (x|y) direction of a nearby germ identified by view id
-                # Result is -1 or 1. 0 is given if the identified germ doesn't exist in view
-                uid = self.resolve_value(expr[1])
+            elif expr[0] == 'fix':
                 try:
-                    return next(i['dx'] for i in self.state['view'] if i['id'] == uid)
-                except StopIteration:
+                    index = self.resolve_value(expr[1]) % len(self.state['view']['food'])
+                    return self.state['view']['food'][index]['dx']
+                except ZeroDivisionError:
+                    # view is empty
                     return 0
-            elif expr[0] == 'vy':
-                uid = self.resolve_value(expr[1])
+            elif expr[0] == 'fiy':
                 try:
-                    return next(i['dy'] for i in self.state['view'] if i['id'] == uid)
-                except StopIteration:
+                    index = self.resolve_value(expr[1]) % len(self.state['view']['food'])
+                    return self.state['view']['food'][index]['dy']
+                except ZeroDivisionError:
+                    # view is empty
                     return 0
 
             else:
@@ -245,7 +242,11 @@ class GermBrain:
                 Scale of 0 to 100 indicating percent of GERM_OPACITY
              - stamina (int): Amount of stamina remaining
              - pain (int): Amount of damage taken since last turn
-             - view (list of dict): Data about other germs in the vicinity
+             - view (list of dict): Data about other objects in the vicinity. Keys are:
+                - id (int): the view identifier for this object
+                - dx (int): the relative x coordinate of the object
+                - dy (int): relative y coordinate
+                - fd (boolean): whether this is a food particle
              - success (boolean): False if an action was taken last turn resulting
                 in no change of state; otherwise True.
 
@@ -302,7 +303,8 @@ class GermBrain:
                         ax = -1
                     elif new_x > 0:
                         ax = 1
-                    else: ax = 0
+                    else:
+                        ax = 0
                 elif cmd == 'ay':
                     # set the y-direction of the action to be taken
                     new_y = self.resolve_value(self.code[head][1])
@@ -310,7 +312,8 @@ class GermBrain:
                         ay = -1
                     elif new_y > 0:
                         ay = 1
-                    else: ay = 0
+                    else:
+                        ay = 0
                 elif cmd == 'bst':
                     # set burst value for action request
                     burst = self.resolve_value(self.code[head][1]) == True
