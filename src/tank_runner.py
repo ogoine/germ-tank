@@ -27,7 +27,7 @@ class VisualRunner(tk.Frame):
 
     def do_frame(self):
         self.tank.update(False)
-        paint(self.photo, self.tank.get_pixels(), 2)
+        paint(self.photo, self.tank.get_pixels(), 1)
         self.master.update_idletasks()
         self.master.update()
 

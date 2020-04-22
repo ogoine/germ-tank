@@ -6,8 +6,8 @@ from operator import itemgetter
 
 from germ_brain import GermBrain
 
-TANK_WIDTH = 800
-TANK_HEIGHT = 400
+TANK_WIDTH = 400
+TANK_HEIGHT = 200
 TANK_WRAP = True           # whether the sides of the tank wrap
 SOLAR_POWER = 5.0          # energy imparted by sunlight per turn per column of cells
 GERM_OPACITY = 0.5         # max energy each germ can absorb and block
@@ -29,10 +29,10 @@ ATTACK_BASE_COST = 1.0    # base cost of taking attack action
 ATTACK_POWER_COST = 1.0   # how much energy it costs per unit of power to attack
 BIRTH_COST = 10.0         # how much energy is lost in birthing process
 
-STARTING_CODE = [['if', ['>', 'energy', 70], 2],
-                 ['ret'],
+STARTING_CODE = [['if', ['>', 'energy', 70], 'm0'],
                  ['ax', 1],
-                 ['bir']]
+                 ['bir'],
+                 ['mrk', 'm0']]
 
 def random_mutations():
     if random() < MUTATION_RATE:
@@ -250,4 +250,3 @@ class GermTank:
         for i in self.new_germs:
             self.new_id(i)
         self.new_germs = []
-
