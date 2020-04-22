@@ -1,6 +1,7 @@
 """Classes and methods related to germ code"""
 
 import sys
+from copy import deepcopy
 from random import randrange, choice
 
 MAX_EXECUTIONS = 10000          # Commands to execute before halting; stops infinite loops
@@ -18,7 +19,7 @@ class GermBrain:
          - mutations (int): Apply this many mutations to the parent_code
         """
 
-        self.code = parent_code.copy()
+        self.code = deepcopy(parent_code)
         self.memory = [0] * MEMORY_SIZE
         self.state = None
         # collect mark ids present in code
@@ -33,10 +34,12 @@ class GermBrain:
     def mutate(self):
         """Randomly change code in a single way"""
 
-        print('mutate')
         flat_code = []
         for i, elem in enumerate(self.code):
             flat_code += flatten(elem, [i])
+        if not flat_code:
+            # TODO: Handle case where code becomes empty
+            return
         elem_to_mutate = choice(flat_code)
         if elem_to_mutate[0] == "cmd":
             self.mutate_command(elem_to_mutate[1:])
@@ -51,13 +54,13 @@ class GermBrain:
         command = self.code[address[0]]
         if choice([True, False]):
             # Delete this command
+            self.code.pop(address[0])
             # if statements require special handling
             if command[0] == 'if':
                 # find and remove the mark whose first argument (the mark id) matches
                 # the if statement's second argument
-                self.code.remove(['mrk', command[2]])
                 self.mark_ids.remove(int(command[2][1:]))
-            self.code.pop(address[0])
+                self.code.remove(['mrk', command[2]])
         else:
             # Insert a new command before or after
             index = address[0] + choice([0, 1])
@@ -88,7 +91,7 @@ class GermBrain:
             new_id = 0
         self.code.insert(randrange(len(self.code) + 1), ['mrk', f'm{new_id}'])
         self.mark_ids.add(new_id)
-        return new_id
+        return f'm{new_id}'
 
     def rand_value(self):
         """Returns a random int literal or str special value"""
@@ -158,7 +161,7 @@ class GermBrain:
             return expr
         elif type(expr) == str:
             if expr in self.state.keys() and expr != 'view':
-                return self.state[expr]
+                return int(self.state[expr])
             else:
                 raise KeyError(f'"{expr}" is not a valid special value"')
         elif type(expr) == list:
@@ -279,10 +282,14 @@ class GermBrain:
                     expr = self.resolve_value(self.code[head][1])
                     dest = self.code[head][2]
                     if not expr:
+                        found = False
                         for i, elem in enumerate(self.code):
                             if elem[0] == "mrk" and elem[1] == dest:
                                 head = i
+                                found = True
                                 break
+                        if not found:
+                            raise KeyError(f'Mark "{dest}" not found')
                 elif cmd == 'mrk':
                     # destination of an if statement; does nothing by itself
                     pass
@@ -329,7 +336,10 @@ class GermBrain:
             return {'action':'halt'}
 
         except Exception as err:
-            raise RuntimeError(f'Exception raised from germ code (line {head})') from err
+            msg = f'Exception raised from germ code (line {head})\n'
+            for i, e in enumerate(self.code):
+                msg += f'{i}: {e}\n'
+            raise RuntimeError(msg) from err
 
 def flatten(code_elem, address):
     """Recursive function that 'flattens' code into a one-dimensional list off mutable elements.
