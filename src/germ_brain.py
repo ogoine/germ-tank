@@ -240,7 +240,7 @@ class GermBrain:
         Params:
          - state (dict): The current state of the germ. Keys are:
              - energy (int): Amount of energy remaining
-             - brightness (int): Amount of sunlight available
+             - brightness (int): Amount of sunlight available (inverse of upkeep cost)
                 Scale of 0 to 100 indicating percent of GERM_OPACITY
              - stamina (int): Amount of stamina remaining
              - pain (int): Amount of damage taken since last turn

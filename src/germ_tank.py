@@ -9,24 +9,23 @@ from germ_brain import GermBrain
 TANK_WIDTH = 400
 TANK_HEIGHT = 200
 TANK_WRAP = True           # whether the sides of the tank wrap
-SOLAR_POWER = 7.5          # energy imparted by sunlight per turn per column of cells
-GERM_OPACITY = 0.3         # what proportion of sunlight each germ can absorb and block
 MAX_GERM_ENERGY = 100.0    # max energy each germ can store
 INIT_GERM_ENERGY = 30.0    # starting energy of germ: must commit this + BIRTH_COST to reproduce
 GERM_ABSORB_RATE = 0.5     # What proportion of a prey's energy is gained by a predator
 GERM_BASE_ABSORB = 5.0     # Base amount of energy gained by a predator
-GERM_STAMINA = 15.0        # max stamina each germ can have
-GERM_STAMINA_REGEN = 1.0   # amount of stamina germ regenerates each standard turn
+GERM_STAMINA = 10.0        # max stamina each germ can have
+GERM_STAMINA_REGEN = 0.5   # amount of stamina germ regenerates each standard turn
 DEATH_RATE = 0.0001        # chance a germ has of self-destructing each standard turn
 MUTATION_RATE = 0.15       # chance that offspring has of developing mutations
 MULTI_MUT_RATE = 0.5       # chance of developing each additional mutation beyon the first
 
 # energy costs
 # moving one square always costs 1 energy, as a baseline
-UPKEEP_COST = 0.2         # flat cost of staying alive each turn
+UPKEEP_COST = 0.2         # flat cost of staying alive each turn. Germs pay 10% of this at top
+                          # of tank and 100% at bottom, scaling linearly
 BURST_COST = 1.0          # cost of taking a burst turn
 ATTACK_BASE_COST = 1.0    # base cost of taking attack action
-ATTACK_POWER_COST = 1.0   # how much energy it costs per unit of power to attack
+ATTACK_POWER_COST = 0.5   # how much energy it costs per unit of power to attack
 BIRTH_COST = 10.0         # how much energy is lost in birthing process
 
 STARTING_CODE = [['if', ['>', 'energy', 70], 'm0'],
@@ -141,18 +140,6 @@ class GermTank:
             return -1, -1
         return new_x, new_y
 
-    def get_sunlight(self, x, y):
-        """Returns amount of sunlight energy at the given location"""
-
-        cell_opacity = SOLAR_POWER / float(TANK_HEIGHT)
-        sunlight = SOLAR_POWER
-        for iy in range(y):
-            if self.tank[x][iy]:
-                sunlight -= sunlight * GERM_OPACITY
-            else:
-                sunlight -= cell_opacity
-        return sunlight * GERM_OPACITY
-
     def process_request(self, request, germ, x, y):
         """Process a request returned by a germ"""
 
@@ -219,7 +206,7 @@ class GermTank:
                 if random() < DEATH_RATE:
                     germ['alive'] = False
                     continue
-                germ['energy'] += self.get_sunlight(germ['x'], germ['y']) - UPKEEP_COST
+                germ['energy'] -= UPKEEP_COST * (0.1 + 0.9 * (float(germ['y']) / TANK_HEIGHT))
                 germ['stamina'] += GERM_STAMINA_REGEN
                 germ['stamina'] = min(germ['stamina'], GERM_STAMINA)
                 if germ['energy'] <= 0:
@@ -229,7 +216,7 @@ class GermTank:
 
             # if this is a standard turn or the germ paid for a burst, take action
             if not burst_turn or germ['burst']:
-                brightness = int(100 * self.get_sunlight(germ['x'], germ['y']) / GERM_OPACITY)
+                brightness = (1.0 -  0.9 * (float(germ['y']) / TANK_HEIGHT))
                 request = germ['brain'].run(
                     {'energy':germ['energy'],
                      'brightness':brightness,
