@@ -28,6 +28,19 @@ class GermBrain:
         for i in range(mutations):
             self.mutate()
 
+    def to_dict(self):
+        """Returns a dict representing the code and memory"""
+
+        return {'code':self.code, 'memory':self.memory}
+
+    @staticmethod
+    def from_dict(d):
+        """Returns a new GermBrain object based on a dict representation"""
+
+        out = GermBrain(d['code'], 0)
+        out.memory = d['memory']
+        return out
+
 
     # ---------- METHODS FOR CODE MUTATION ------------------------------
 

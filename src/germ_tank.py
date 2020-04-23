@@ -1,5 +1,6 @@
 """Classes and functions built around the tank simulation itself"""
 
+import json
 from math import sqrt
 from random import random, randrange, choice
 from operator import itemgetter
@@ -45,25 +46,33 @@ STARTING_CODE = [['if', ['>', 'energy', 70], 'm0'],
 class GermTank:
     """Handles the data and execution of the germs in the tank"""
 
-    def __init__(self):
-        """Class constructor"""
+    def __init__(self, json_str=None):
+        """Class constructor that optionally loads from json"""
 
         self.tank = [[None] * TANK_HEIGHT for i in range(TANK_WIDTH)]
-        self.id_registry = dict()
+        self.objects = []
         self.new_germs = []
 
-        # add a starting number of germs and food each equal to TANK_WIDTH
-        # set comprehension ensure rare duplicates are removed
-        self.food_count = TANK_WIDTH
-        locs = {(randrange(TANK_WIDTH), randrange(TANK_HEIGHT)) for i in range(TANK_WIDTH * 2)}
-        c = 0
-        for x, y in locs:
-            if c < TANK_WIDTH:
-                self.new_id(self.add_germ(x, y, GermBrain(STARTING_CODE, 0)))
-            else:
-                # germs with no brain are food particles
-                self.new_id(self.add_germ(x, y, None))
-            c += 1
+        if json_str is None:
+            # add a starting number of germs and food each equal to TANK_WIDTH
+            # set comprehension ensure rare duplicates are removed
+            self.food_count = TANK_WIDTH
+            locs = {(randrange(TANK_WIDTH), randrange(TANK_HEIGHT)) for i in range(TANK_WIDTH * 2)}
+            c = 0
+            for x, y in locs:
+                if c < TANK_WIDTH:
+                    self.objects.append(self.add_germ(x, y, GermBrain(STARTING_CODE, 0)))
+                else:
+                    # germs with no brain are food particles
+                    self.objects.append(self.add_germ(x, y, None))
+                c += 1
+        else:
+            for d in json.loads(json_str):
+                obj = {i:d[i] for i in d if i != 'brain'}
+                obj['brain'] = GermBrain.from_dict(d['brain']) if d['brain'] else None
+                self.tank[obj['x']][obj['y']] = obj
+                self.objects.append(obj)
+            self.food_count = len([i for i in self.objects if not i['brain']])
 
         # create view_locs, a list of visible relative coordinates based on GERM_VIEW_DIST
         # sorted by near to far
@@ -78,6 +87,16 @@ class GermTank:
         view_locs_dist = sorted(view_locs_dist, key=itemgetter(1, 0))
         self.view_locs = [i[0] for i in view_locs_dist]
 
+    def to_json(self):
+        """Dumps the object list to json"""
+
+        out = []
+        for obj in self.objects:
+            d = {i:obj[i] for i in obj if i != 'brain'}
+            d['brain'] = obj['brain'].to_dict() if obj['brain'] else None
+            out.append(d)
+        return json.dumps(out)
+
     def get_pixels(self):
         """Returns a list of pixels representing germs in the form (x, y, r, g, b)"""
 
@@ -86,25 +105,14 @@ class GermTank:
                 return (obj['x'], obj['y'], 255, 255, 255)
             else:
                 return (obj['x'], obj['y'], 200, 150, 0)
-        return [get_pixel(i) for i in self.id_registry.values()]
-
-    def new_id(self, germ):
-        """Registers a new germ and gives it a uid"""
-
-        if self.id_registry:
-            all_ids = set(range(max(self.id_registry.keys()) + 2))
-            new_id = min(all_ids - self.id_registry.keys())
-        else:
-            new_id = 0
-        germ['uid'] = new_id
-        self.id_registry[new_id] = germ
+        return [get_pixel(i) for i in self.objects]
 
     def kill_germ(self, germ):
         """Destroys the given germ"""
 
         if not germ['brain']:
             self.food_count -= 1
-        del self.id_registry[germ['uid']]
+        self.objects.remove(germ)
         self.tank[germ['x']][germ['y']] = None
 
     def add_germ(self, x, y, germ_brain):
@@ -122,8 +130,7 @@ class GermTank:
                 'stamina':GERM_STAMINA,
                 'success':True,
                 'burst':False,
-                'pain':0,
-                'view_ids':dict()}
+                'pain':0}
         else:
             # germs with no brain are food particles
             self.food_count += 1
@@ -261,7 +268,7 @@ class GermTank:
          - burst_turn (boolean): True if this is a burst turn; otherwise, a standard turn.
         """
 
-        for germ in self.id_registry.values():
+        for germ in self.objects:
             if germ['alive']:
                 # germ or food?
                 if germ['brain']:
@@ -317,11 +324,10 @@ class GermTank:
 
 
         # kill germs marked for death and register new ids
-        to_kill = [i for i in self.id_registry.values() if not i['alive']]
+        to_kill = [i for i in self.objects if not i['alive']]
         for i in to_kill:
             self.kill_germ(i)
-        for i in self.new_germs:
-            self.new_id(i)
+        self.objects.extend(self.new_germs)
         self.new_germs = []
 
         # regenerate food
@@ -334,7 +340,7 @@ class GermTank:
                 x = randrange(TANK_WIDTH)
                 y = randrange(TANK_HEIGHT)
                 if not self.tank[x][y]:
-                    self.new_id(self.add_germ(x, y, None))
+                    self.objects.append(self.add_germ(x, y, None))
                     c += 1
                     if c >= to_add:
                         break

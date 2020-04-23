@@ -20,18 +20,30 @@ class VisualRunner(tk.Frame):
 
         super().__init__(master)
         self.master = master
+        self.master.protocol("WM_DELETE_WINDOW", self.close)
         self.pack()
         self.scale = 3
-        self.photo = tk.PhotoImage(width=TANK_WIDTH * self.scale, height=TANK_HEIGHT * self.scale)
-        self.label = tk.Label(image=self.photo)
+        self.photo = tk.PhotoImage(master=self,
+                                   width=TANK_WIDTH * self.scale,
+                                   height=TANK_HEIGHT * self.scale)
+        self.label = tk.Label(master=self, image=self.photo)
         self.label.pack()
-        self.tank = GermTank()
+        try:
+            with open('autosave.json') as fileobj:
+                self.tank = GermTank(fileobj.read())
+        except FileNotFoundError:
+            self.tank = GermTank()
 
     def do_frame(self):
         self.tank.update(False)
         paint(self.photo, self.tank.get_pixels(), self.scale)
         self.master.update_idletasks()
         self.master.update()
+
+    def close(self):
+        with open('autosave.json', 'w') as fileobj:
+            fileobj.write(self.tank.to_json())
+        self.master.destroy()
 
 def main(*args):
     runner = VisualRunner(master=tk.Tk())
