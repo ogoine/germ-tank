@@ -6,8 +6,8 @@ from operator import itemgetter
 
 from germ_brain import GermBrain
 
-TANK_WIDTH = 150
-TANK_HEIGHT = 100
+TANK_WIDTH = 225
+TANK_HEIGHT = 150
 TANK_WRAP = True           # whether the sides of the tank wrap
 MAX_FOOD_DENSITY = 0.02    # max amount of food per pixel spawned
 FOOD_GROWTH_RATE = 0.05      # proportion of max food spawned per frame
@@ -81,7 +81,12 @@ class GermTank:
     def get_pixels(self):
         """Returns a list of pixels representing germs in the form (x, y, r, g, b)"""
 
-        return [(i['x'], i['y'], 255, 255, 255) for i in self.id_registry.values()]
+        def get_pixel(obj):
+            if obj['brain']:
+                return (obj['x'], obj['y'], 255, 255, 255)
+            else:
+                return (obj['x'], obj['y'], 200, 150, 0)
+        return [get_pixel(i) for i in self.id_registry.values()]
 
     def new_id(self, germ):
         """Registers a new germ and gives it a uid"""

@@ -5,11 +5,12 @@ import tkinter as tk
 
 from germ_tank import GermTank, TANK_WIDTH, TANK_HEIGHT
 
-def paint(image, pixels, pen_size=1):
+def paint(image, pixels, scale=1):
 
-    image.put('black', (0, 0, TANK_WIDTH, TANK_HEIGHT))
+    image.put('black', (0, 0, TANK_WIDTH * scale, TANK_HEIGHT * scale))
     for x, y, r, g, b in pixels:
-        image.put("#%02x%02x%02x" % (r, g, b), (x, y, x + pen_size, y + pen_size))
+        image.put("#%02x%02x%02x" % (r, g, b),
+                  (x * scale, y * scale, x * scale + scale, y * scale + scale))
 
 class VisualRunner(tk.Frame):
     """Allows for running a tank with visual feedback"""
@@ -20,14 +21,15 @@ class VisualRunner(tk.Frame):
         super().__init__(master)
         self.master = master
         self.pack()
-        self.photo = tk.PhotoImage(width=TANK_WIDTH, height=TANK_HEIGHT)
+        self.scale = 3
+        self.photo = tk.PhotoImage(width=TANK_WIDTH * self.scale, height=TANK_HEIGHT * self.scale)
         self.label = tk.Label(image=self.photo)
         self.label.pack()
         self.tank = GermTank()
 
     def do_frame(self):
         self.tank.update(False)
-        paint(self.photo, self.tank.get_pixels(), 1)
+        paint(self.photo, self.tank.get_pixels(), self.scale)
         self.master.update_idletasks()
         self.master.update()
 
