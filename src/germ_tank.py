@@ -17,7 +17,7 @@ MAX_GERM_ENERGY = 100.0    # max energy each germ can store
 INIT_GERM_ENERGY = 30.0    # starting energy of germ: must commit this + BIRTH_COST to reproduce
 GERM_ABSORB_RATE = 0.5     # What proportion of a prey's energy is gained by a predator
 GERM_BASE_ABSORB = 5.0     # Base amount of energy gained by a predator
-GERM_STAMINA = 10.0        # max stamina each germ can have
+GERM_STAMINA = 5.0         # max stamina each germ can have
 GERM_STAMINA_REGEN = 0.5   # amount of stamina germ regenerates each standard turn
 GERM_VIEW_DIST = 10        # view distance of germs; must be 50 or less
 DEATH_RATE = 0.0001        # chance a germ has of self-destructing each standard turn
@@ -26,7 +26,7 @@ MULTI_MUT_RATE = 0.5       # chance of developing each additional mutation beyon
 
 # energy costs
 # moving one square always costs 1 energy, as a baseline
-UPKEEP_COST = 0.5         # flat cost of staying alive each turn. Germs pay 10% of this at top
+UPKEEP_COST = 1.0         # flat cost of staying alive each turn. Germs pay 10% of this at top
                           # of tank and 100% at bottom, scaling linearly
 BURST_COST = 1.0          # cost of taking a burst turn
 ATTACK_BASE_COST = 1.0    # base cost of taking attack action
@@ -54,6 +54,7 @@ class GermTank:
         self.new_germs = []
 
         if json_str is None:
+            self.frames_elapsed = 0
             # add a starting number of germs and food each equal to TANK_WIDTH
             # set comprehension ensure rare duplicates are removed
             self.food_count = TANK_WIDTH
@@ -67,7 +68,9 @@ class GermTank:
                     self.objects.append(self.add_germ(x, y, None))
                 c += 1
         else:
-            for d in json.loads(json_str):
+            data = json.loads(json_str)
+            self.frames_elapsed = data['history']['frames_elapsed']
+            for d in data['objects']:
                 obj = {i:d[i] for i in d if i != 'brain'}
                 obj['brain'] = GermBrain.from_dict(d['brain']) if d['brain'] else None
                 self.tank[obj['x']][obj['y']] = obj
@@ -95,7 +98,20 @@ class GermTank:
             d = {i:obj[i] for i in obj if i != 'brain'}
             d['brain'] = obj['brain'].to_dict() if obj['brain'] else None
             out.append(d)
-        return json.dumps(out)
+        return json.dumps({'objects':out, 'history':{'frames_elapsed':self.frames_elapsed}})
+
+    def get_stats(self):
+        """Returns a dict with statistical data"""
+
+        energy = 0.0
+        germ_count = 0
+        for i in self.objects:
+            energy += i['energy'] if 'energy' in i else 20
+            if i['brain']:
+                germ_count += 1
+        return {'energy_density': energy / TANK_WIDTH / TANK_HEIGHT,
+                'frames_elapsed': self.frames_elapsed,
+                'germ_count': germ_count}
 
     def get_pixels(self):
         """Returns a list of pixels representing germs in the form (x, y, r, g, b)"""
@@ -268,6 +284,7 @@ class GermTank:
          - burst_turn (boolean): True if this is a burst turn; otherwise, a standard turn.
         """
 
+        self.frames_elapsed += 1
         for germ in self.objects:
             if germ['alive']:
                 # germ or food?
