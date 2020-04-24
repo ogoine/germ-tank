@@ -55,8 +55,8 @@ class TankRunner(ABC):
             elapsed = time_ns() - start_time
             self.frames_executed += 1
             # After first 500 frames, print stats every 10k frames
-            # On frame 200, start gathering timing data, then print stats when 50 entries gathered
-            if self.frames_executed % 10000 == 200 or self.frame_timings:
+            # On frame 100, start gathering timing data, then print stats when 50 entries gathered
+            if self.frames_executed % 10000 == 100 or self.frame_timings:
                 self.frame_timings.append(elapsed)
                 if len(self.frame_timings) >= 50:
                     self.print_stats()
@@ -94,48 +94,56 @@ class HeadlessRunner(TankRunner):
         with open('autosave.json', 'w') as fileobj:
             fileobj.write(self.tank.to_json())
 
-class VisualRunner(tk.Frame, TankRunner):
+class VisualRunner(TankRunner):
     """Allows for running a tank with visual feedback"""
 
-    def __init__(self, master=None):
+    def __init__(self, root=None):
         """Class constructor"""
 
-        super(tk.Frame, self).__init__(master)
-        self.master = master
-        self.master.protocol("WM_DELETE_WINDOW", self.close)
-        self.pack()
+        self.frame = tk.Frame(root)
+        self.root = root
+        self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.frame.pack()
         self.scale = 3
-        self.photo = tk.PhotoImage(master=self,
+        self.photo = tk.PhotoImage(master=self.frame,
                                    width=TANK_WIDTH * self.scale,
                                    height=TANK_HEIGHT * self.scale)
-        self.label = tk.Label(master=self, image=self.photo)
+        self.label = tk.Label(master=self.frame, image=self.photo)
         self.label.pack()
         try:
             with open('autosave.json') as fileobj:
-                super(TankRunner, self).__init__(GermTank(fileobj.read()))
+                super().__init__(GermTank(fileobj.read()))
         except FileNotFoundError:
-            super(TankRunner, self).__init__(GermTank())
+            super().__init__(GermTank())
 
     def do_frame(self):
         """Called every frame"""
 
         self.tank.update(False)
-        paint(self.photo, self.tank.get_pixels(), self.scale)
-        self.master.update_idletasks()
-        self.master.update()
+        try:
+            paint(self.photo, self.tank.get_pixels(), self.scale)
+            self.root.update_idletasks()
+            self.root.update()
+        except tk.TclError:
+            # window destroyed
+            self.stop_requested = True
 
     def close(self):
         """Called when the app closes"""
 
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            # app already destroyed
+            self.stop_requested = True
         with open('autosave.json', 'w') as fileobj:
             fileobj.write(self.tank.to_json())
-        self.master.destroy()
 
 def main(args):
     if len(args) > 1 and args[1] == "-H":
         runner = HeadlessRunner()
     else:
-        runner = VisualRunner(master=tk.Tk())
+        runner = VisualRunner(root=tk.Tk())
     runner.run()
 
 if __name__ == "__main__":
