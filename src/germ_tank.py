@@ -49,7 +49,8 @@ class GermTank:
     def __init__(self, json_str=None):
         """Class constructor that optionally loads from json"""
 
-        self.tank = [[None] * TANK_HEIGHT for i in range(TANK_WIDTH)]
+        # self.tank is a list of rows of cells, so it must be accessed with (y, x) coords
+        self.tank = [[None] * TANK_WIDTH for i in range(TANK_HEIGHT)]
         self.objects = []
         self.new_germs = []
 
@@ -73,7 +74,7 @@ class GermTank:
             for d in data['objects']:
                 obj = {i:d[i] for i in d if i != 'brain'}
                 obj['brain'] = GermBrain.from_dict(d['brain']) if d['brain'] else None
-                self.tank[obj['x']][obj['y']] = obj
+                self.tank[obj['y']][obj['x']] = obj
                 self.objects.append(obj)
             self.food_count = len([i for i in self.objects if not i['brain']])
 
@@ -114,14 +115,17 @@ class GermTank:
                 'germ_count': germ_count}
 
     def get_pixels(self):
-        """Returns a list of pixels representing germs in the form (x, y, r, g, b)"""
+        """Returns a list of rows of pixel colors representing the tank"""
 
         def get_pixel(obj):
-            if obj['brain']:
-                return (obj['x'], obj['y'], 255, 255, 255)
+            if obj:
+                if obj['brain']:
+                    return "white"
+                else:
+                    return "green"
             else:
-                return (obj['x'], obj['y'], 200, 150, 0)
-        return [get_pixel(i) for i in self.objects]
+                return "black"
+        return [[get_pixel(p) for p in self.tank[i]] for i in range(TANK_HEIGHT)]
 
     def kill_germ(self, germ):
         """Destroys the given germ"""
@@ -129,12 +133,12 @@ class GermTank:
         if not germ['brain']:
             self.food_count -= 1
         self.objects.remove(germ)
-        self.tank[germ['x']][germ['y']] = None
+        self.tank[germ['y']][germ['x']] = None
 
     def add_germ(self, x, y, germ_brain):
         """Creates a new germ at the given location"""
 
-        if self.tank[x][y]:
+        if self.tank[y][x]:
             raise RuntimeError(f'Location ({x}, {y}) already occupied')
         if germ_brain:
             germ = {
@@ -155,7 +159,7 @@ class GermTank:
                 'alive':True,
                 'x':x,
                 'y':y}
-        self.tank[x][y] = germ
+        self.tank[y][x] = germ
         return germ
 
     def get_view(self, x, y):
@@ -166,7 +170,7 @@ class GermTank:
             if tgt_x != -1:
                 tdx = tgt_x - x
                 tdy = tgt_y - y
-                cell = self.tank[tgt_x][tgt_y]
+                cell = self.tank[tgt_y][tgt_x]
                 if cell and cell['alive']:
                     return {'dx':tdx, 'dy':tdy, 'is_food':cell['brain'] is None}
             return None
@@ -187,7 +191,7 @@ class GermTank:
         locs = sorted(locs, key=itemgetter(2))
         for ndx, ndy, d in locs:
             new_x, new_y = self.get_relative_loc(x, y, ndx, ndy)
-            if new_x != -1 and not self.tank[new_x][new_y]:
+            if new_x != -1 and not self.tank[new_y][new_x]:
                 return new_x, new_y
         return -1, -1
 
@@ -218,7 +222,7 @@ class GermTank:
                     locs.append((i, j))
         for dx, dy in locs:
             tgt_x, tgt_y = self.get_relative_loc(germ['x'], germ['y'], dx, dy)
-            target = self.tank[tgt_x][tgt_y]
+            target = self.tank[tgt_y][tgt_x]
             if target and not target['brain'] and target['alive']:
                 germ['energy'] += FOOD_ENERGY
                 target['alive'] = False
@@ -241,15 +245,15 @@ class GermTank:
 
         elif request['action'] == 'move':
             new_x, new_y = self.get_relative_loc(x, y, request['x'], request['y'])
-            if new_x == -1 or self.tank[new_x][new_y]:
+            if new_x == -1 or self.tank[new_y][new_x]:
                 germ['success'] = False
             else:
                 germ['success'] = True
                 germ['energy'] -= sqrt(request['x'] ** 2 + request['y'] ** 2)
                 germ['x'] = new_x
                 germ['y'] = new_y
-                self.tank[new_x][new_y] = germ
-                self.tank[x][y] = None
+                self.tank[new_y][new_x] = germ
+                self.tank[y][x] = None
 
         elif request['action'] == 'birth':
             new_x, new_y = self.get_birth_loc(x, y, request['x'], request['y'])
@@ -264,7 +268,7 @@ class GermTank:
         elif request['action'] == 'attack':
             tgt_x, tgt_y = self.get_relative_loc(x, y, request['x'], request['y'])
             cost = ATTACK_BASE_COST + ATTACK_POWER_COST * float(request['power'])
-            target = self.tank[tgt_x][tgt_y]
+            target = self.tank[tgt_y][tgt_x]
             if not target or not target['alive'] or not request['power'] or cost > germ['energy']:
                 germ['success'] = False
             else:
@@ -331,13 +335,13 @@ class GermTank:
                                 locs.append((i, j))
                     dx, dy = choice(locs)
                     new_x, new_y = self.get_relative_loc(germ['x'], germ['y'], dx, dy)
-                    if new_x != -1 and not self.tank[new_x][new_y]:
+                    if new_x != -1 and not self.tank[new_y][new_x]:
                         old_x = germ['x']
                         old_y = germ['y']
                         germ['x'] = new_x
                         germ['y'] = new_y
-                        self.tank[new_x][new_y] = germ
-                        self.tank[old_x][old_y] = None
+                        self.tank[new_y][new_x] = germ
+                        self.tank[old_y][old_x] = None
 
 
         # kill germs marked for death and register new ids
@@ -356,7 +360,7 @@ class GermTank:
             for i in range(1000):
                 x = randrange(TANK_WIDTH)
                 y = randrange(TANK_HEIGHT)
-                if not self.tank[x][y]:
+                if not self.tank[y][x]:
                     self.objects.append(self.add_germ(x, y, None))
                     c += 1
                     if c >= to_add:

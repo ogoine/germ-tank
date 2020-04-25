@@ -5,15 +5,15 @@ import tkinter as tk
 import signal
 from abc import ABC, abstractmethod
 from time import time_ns
+import _thread
+from itertools import chain
+from pprint import pprint
 
 from germ_tank import GermTank, TANK_WIDTH, TANK_HEIGHT
 
 def paint(image, pixels, scale=1):
-
-    image.put('black', (0, 0, TANK_WIDTH * scale, TANK_HEIGHT * scale))
-    for x, y, r, g, b in pixels:
-        image.put("#%02x%02x%02x" % (r, g, b),
-                  (x * scale, y * scale, x * scale + scale, y * scale + scale))
+    image.put(" ".join(["{" + " ".join(chain(*zip(*[row for _ in range(scale)]))) + "}" for row in pixels for _ in range(scale)]),
+              (0, 0, TANK_WIDTH * scale, TANK_HEIGHT * scale))
 
 class TankRunner(ABC):
     """Base class for tank runners"""
@@ -22,6 +22,7 @@ class TankRunner(ABC):
         """Class constructor"""
 
         self.stop_requested = False
+        self.pause = False
         self.frames_executed = 0
         self.frame_timings = []
         signal.signal(signal.SIGINT, self.stop_execution)
@@ -50,18 +51,24 @@ class TankRunner(ABC):
         """Repeatedly calls do_frame and dumps stats to stdout every 10k frames"""
 
         while not self.stop_requested:
-            start_time = time_ns()
-            self.do_frame()
-            elapsed = time_ns() - start_time
-            self.frames_executed += 1
-            # After first 500 frames, print stats every 10k frames
-            # On frame 100, start gathering timing data, then print stats when 50 entries gathered
-            if self.frames_executed % 10000 == 100 or self.frame_timings:
-                self.frame_timings.append(elapsed)
-                if len(self.frame_timings) >= 50:
-                    self.print_stats()
-                    self.frame_timings = []
+            if not self.pause:
+                start_time = time_ns()
+                self.do_frame()
+                elapsed = time_ns() - start_time
+                self.frames_executed += 1
+                # After first 500 frames, print stats every 10k frames
+                # On frame 100, start gathering timing data, then print stats when 50 entries gathered
+                if self.frames_executed % 10000 == 100 or self.frame_timings:
+                    self.frame_timings.append(elapsed)
+                    if len(self.frame_timings) >= 50:
+                        self.print_stats()
+                        self.frame_timings = []
         self.close()
+
+    def toggle_pause(self, event):
+        """Pauses or unpauses the tank"""
+
+        self.pause = not self.pause
 
     @abstractmethod
     def do_frame(self):
@@ -100,11 +107,13 @@ class VisualRunner(TankRunner):
     def __init__(self, root=None):
         """Class constructor"""
 
-        self.frame = tk.Frame(root)
+        self.scale = 3
         self.root = root
         self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.root.bind("<space>", self.toggle_pause)
+        self.root.bind("<Button-1>", self.inspect)
+        self.frame = tk.Frame(self.root)
         self.frame.pack()
-        self.scale = 3
         self.photo = tk.PhotoImage(master=self.frame,
                                    width=TANK_WIDTH * self.scale,
                                    height=TANK_HEIGHT * self.scale)
@@ -122,8 +131,6 @@ class VisualRunner(TankRunner):
         self.tank.update(False)
         try:
             paint(self.photo, self.tank.get_pixels(), self.scale)
-            self.root.update_idletasks()
-            self.root.update()
         except tk.TclError:
             # window destroyed
             self.stop_requested = True
@@ -139,12 +146,28 @@ class VisualRunner(TankRunner):
         with open('autosave.json', 'w') as fileobj:
             fileobj.write(self.tank.to_json())
 
+    def inspect(self, event):
+        """Inspects the clicked cell when the tank is paused"""
+
+        if self.pause:
+            x = int(event.x / self.scale - 1)
+            y = int(event.y / self.scale - 1)
+            try:
+                germ = self.tank.tank[y][x]
+            except IndexError:
+                return
+            if germ and germ['brain']:
+                pprint(germ['brain'].code)
+
 def main(args):
     if len(args) > 1 and args[1] == "-H":
         runner = HeadlessRunner()
+        runner.run()
     else:
-        runner = VisualRunner(root=tk.Tk())
-    runner.run()
+        root = tk.Tk()
+        runner = VisualRunner(root=root)
+        _thread.start_new_thread(runner.run, tuple())
+        root.mainloop()
 
 if __name__ == "__main__":
     main(sys.argv)
