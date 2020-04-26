@@ -215,17 +215,19 @@ class GermTank:
     def dine(self, germ):
         """Allow the supplied germ to consume one adjacent food particle"""
 
-        locs = []
-        for i in [-1, 0, 1]:
-            for j in [-1, 0, 1]:
-                if not (i == 0 and j == 0):
-                    locs.append((i, j))
-        for dx, dy in locs:
-            tgt_x, tgt_y = self.get_relative_loc(germ['x'], germ['y'], dx, dy)
-            target = self.tank[tgt_y][tgt_x]
-            if target and not target['brain'] and target['alive']:
-                germ['energy'] += FOOD_ENERGY
-                target['alive'] = False
+        # germs can only eat if they can absorb all the energy
+        if germ['energy'] + FOOD_ENERGY < MAX_GERM_ENERGY:
+            locs = []
+            for i in [-1, 0, 1]:
+                for j in [-1, 0, 1]:
+                    if not (i == 0 and j == 0):
+                        locs.append((i, j))
+            for dx, dy in locs:
+                tgt_x, tgt_y = self.get_relative_loc(germ['x'], germ['y'], dx, dy)
+                target = self.tank[tgt_y][tgt_x]
+                if target and not target['brain'] and target['alive']:
+                    germ['energy'] += FOOD_ENERGY
+                    target['alive'] = False
 
     def process_request(self, request, germ, x, y):
         """Process a request returned by a germ"""
@@ -277,8 +279,9 @@ class GermTank:
                 target['stamina'] -= request['power']
                 target['pain'] += request['power']
                 if target['stamina'] <= 0:
-                    germ['energy'] += ((target['energy'] - GERM_BASE_ABSORB)
-                        * GERM_ABSORB_RATE + GERM_BASE_ABSORB)
+                    germ['energy'] += max(
+                        MAX_GERM_ENERGY,
+                        (target['energy'] - GERM_BASE_ABSORB) * GERM_ABSORB_RATE + GERM_BASE_ABSORB)
                     target['alive'] = False
 
     def update(self, burst_turn):
@@ -295,16 +298,13 @@ class GermTank:
                 if germ['brain']:
                     # on standard turns, do upkeep tasks
                     if not burst_turn:
-                        if random() < DEATH_RATE:
-                            germ['alive'] = False
-                            continue
                         germ['energy'] -= UPKEEP_COST * (0.1 + 0.9 * (float(germ['y']) / TANK_HEIGHT))
-                        germ['stamina'] += GERM_STAMINA_REGEN
-                        germ['stamina'] = min(germ['stamina'], GERM_STAMINA)
-                        if germ['energy'] <= 0:
+                        if germ['stamina'] < GERM_STAMINA:
+                            germ['stamina'] += GERM_STAMINA_REGEN
+                            germ['stamina'] = min(germ['stamina'], GERM_STAMINA)
+                        if germ['energy'] <= 0 or random() < DEATH_RATE:
                             germ['alive'] = False
                             continue
-                        germ['energy'] = min(germ['energy'], MAX_GERM_ENERGY)
 
                     # if this is a standard turn or the germ paid for a burst, take action
                     if not burst_turn or germ['burst']:
@@ -319,11 +319,8 @@ class GermTank:
                              'success':germ['success']})
                         self.process_request(request, germ, germ['x'], germ['y'])
 
-                        # pain only tracks since last turn; also recheck energy bounds
+                        # pain only tracks since last turn; also recheck energy
                         germ['pain'] = 0
-                        if germ['energy'] <= 0:
-                            germ['alive'] = False
-                        germ['energy'] = min(germ['energy'], MAX_GERM_ENERGY)
 
                 # food particle
                 elif not burst_turn:

@@ -128,36 +128,38 @@ class GermBrain:
     def rand_operator(self):
         """Returns a list representing a random operator and args"""
 
-        return choice([['+', self.rand_value(), self.rand_value()],
-                       ['-', self.rand_value(), self.rand_value()],
-                       ['*', self.rand_value(), self.rand_value()],
-                       ['/', self.rand_value(), self.rand_value()],
-                       ['&', self.rand_value(), self.rand_value()],
-                       ['|', self.rand_value(), self.rand_value()],
-                       ['!', self.rand_value()],
-                       ['<', self.rand_value(), self.rand_value()],
-                       ['>', self.rand_value(), self.rand_value()],
-                       ['==', self.rand_value(), self.rand_value()],
-                       ['!=', self.rand_value(), self.rand_value()],
-                       ['m', self.rand_value()],
-                       ['gix', self.rand_value()],
-                       ['giy', self.rand_value()],
-                       ['fix', self.rand_value()],
-                       ['fiy', self.rand_value()]])
+        oper = choice([['+', self.rand_value, self.rand_value],
+                       ['-', self.rand_value, self.rand_value],
+                       ['*', self.rand_value, self.rand_value],
+                       ['/', self.rand_value, self.rand_value],
+                       ['&', self.rand_value, self.rand_value],
+                       ['|', self.rand_value, self.rand_value],
+                       ['!', self.rand_value],
+                       ['<', self.rand_value, self.rand_value],
+                       ['>', self.rand_value, self.rand_value],
+                       ['==', self.rand_value, self.rand_value],
+                       ['!=', self.rand_value, self.rand_value],
+                       ['m', self.rand_value],
+                       ['gix', self.rand_value],
+                       ['giy', self.rand_value],
+                       ['fix', self.rand_value],
+                       ['fiy', self.rand_value]])
+        return [oper[0]] + [i() for i in oper[1:]]
 
     def rand_command(self):
         """Returns a list representing a random command and args"""
 
-        return choice([['set', self.rand_value(), self.rand_value()],
-                       ['if', self.rand_value(), self.add_rand_mark()],
-                       ['ax', self.rand_value()],
-                       ['ay', self.rand_value()],
-                       ['bst', self.rand_value()],
-                       ['pwr', self.rand_value()],
-                       ['mv'],
-                       ['bir'],
-                       ['att'],
-                       ['ret']])
+        cmd = choice([['set', self.rand_value, self.rand_value],
+                      ['if', self.rand_value, self.add_rand_mark],
+                      ['ax', self.rand_value],
+                      ['ay', self.rand_value],
+                      ['bst', self.rand_value],
+                      ['pwr', self.rand_value],
+                      ['mv'],
+                      ['bir'],
+                      ['att'],
+                      ['ret']])
+        return [cmd[0]] + [i() for i in cmd[1:]]
 
 
     # ---------- METHODS FOR CODE EXECUTION ------------------------------

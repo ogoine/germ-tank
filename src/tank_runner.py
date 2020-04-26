@@ -56,7 +56,6 @@ class TankRunner(ABC):
                 self.do_frame()
                 elapsed = time_ns() - start_time
                 self.frames_executed += 1
-                # After first 500 frames, print stats every 10k frames
                 # On frame 100, start gathering timing data, then print stats when 50 entries gathered
                 if self.frames_executed % 10000 == 100 or self.frame_timings:
                     self.frame_timings.append(elapsed)
@@ -157,6 +156,7 @@ class VisualRunner(TankRunner):
             except IndexError:
                 return
             if germ and germ['brain']:
+                print("\nGERM CODE:")
                 pprint(germ['brain'].code)
 
 def main(args):
